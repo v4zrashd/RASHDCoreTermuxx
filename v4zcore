@@ -1,0 +1,539 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ============================================================
+#  V4Z Core - modular Termux dev environment manager
+#  by V4Z RASHD | https://t.me/rashdteem
+#
+#  One CLI to install, list, inspect and remove Termux
+#  development modules (languages, tools, editors, databases,
+#  AI assistants, shell). Original tool; Bash + pkg/npm only.
+# ============================================================
+
+VERSION="1.0"
+DRY_RUN=0
+
+GREEN="\033[92m"; CYAN="\033[96m"; YELLOW="\033[93m"
+RED="\033[91m"; DIM="\033[2m"; BOLD="\033[1m"; RESET="\033[0m"
+
+say()  { printf '%b\n' "$1"; }
+info() { say "${CYAN}$1${RESET}"; }
+ok()   { say "${GREEN}$1${RESET}"; }
+warn() { say "${YELLOW}$1${RESET}"; }
+err()  { say "${RED}$1${RESET}"; }
+
+banner() {
+  say "${GREEN}========================================================${RESET}"
+  say "${GREEN}${BOLD}  V4Z Core  v${VERSION}  -  Termux Dev Environment${RESET}"
+  say "${DIM}  by V4Z RASHD  |  https://t.me/rashdteem${RESET}"
+  say "${GREEN}========================================================${RESET}"
+}
+
+# Run a command, or just print it in dry-run mode.
+run() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '%b\n' "${DIM}[dry-run] + $*${RESET}"
+  else
+    "$@"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Module catalogue (original V4Z mapping of well-known Termux packages)
+# ---------------------------------------------------------------------------
+
+MODULE_ORDER="lang dev editor db ai shell"
+
+module_tools() {
+  case "$1" in
+    lang)   echo "python nodejs php golang rust" ;;
+    dev)    echo "git curl wget jq fzf bat lsd" ;;
+    editor) echo "neovim" ;;
+    db)     echo "sqlite postgresql mariadb" ;;
+    ai)     echo "opencode cline" ;;
+    shell)  echo "zsh" ;;
+    *)      echo "" ;;
+  esac
+}
+
+module_desc() {
+  case "$1" in
+    lang)   echo "Programming languages: Python, Node.js, PHP, Go, Rust" ;;
+    dev)    echo "Everyday developer tools: git, curl, wget, jq, fzf, bat, lsd" ;;
+    editor) echo "Code editor: Neovim" ;;
+    db)     echo "Databases: SQLite, PostgreSQL, MariaDB" ;;
+    ai)     echo "AI coding assistants (via npm): OpenCode, Cline" ;;
+    shell)  echo "Z shell with plugin guidance" ;;
+    *)      echo "" ;;
+  esac
+}
+
+# How a tool gets installed: "pkg" (Termux repo) or "npm" (global npm package)
+tool_method() {
+  case "$1" in
+    opencode|cline) echo "npm" ;;
+    *)              echo "pkg" ;;
+  esac
+}
+
+# Package name for pkg / npm
+tool_pkg() {
+  case "$1" in
+    python)     echo "python" ;;
+    nodejs)     echo "nodejs" ;;
+    php)        echo "php" ;;
+    golang)     echo "golang" ;;
+    rust)       echo "rust" ;;
+    git)        echo "git" ;;
+    curl)       echo "curl" ;;
+    wget)       echo "wget" ;;
+    jq)         echo "jq" ;;
+    fzf)        echo "fzf" ;;
+    bat)        echo "bat" ;;
+    lsd)        echo "lsd" ;;
+    neovim)     echo "neovim" ;;
+    sqlite)     echo "sqlite" ;;
+    postgresql) echo "postgresql" ;;
+    mariadb)    echo "mariadb" ;;
+    opencode)   echo "opencode-ai" ;;
+    cline)      echo "cline" ;;
+    zsh)        echo "zsh" ;;
+    *)          echo "" ;;
+  esac
+}
+
+# Binary used to detect whether the tool is present
+tool_bin() {
+  case "$1" in
+    python)     echo "python" ;;
+    nodejs)     echo "node" ;;
+    php)        echo "php" ;;
+    golang)     echo "go" ;;
+    rust)       echo "rustc" ;;
+    git)        echo "git" ;;
+    curl)       echo "curl" ;;
+    wget)       echo "wget" ;;
+    jq)         echo "jq" ;;
+    fzf)        echo "fzf" ;;
+    bat)        echo "bat" ;;
+    lsd)        echo "lsd" ;;
+    neovim)     echo "nvim" ;;
+    sqlite)     echo "sqlite3" ;;
+    postgresql) echo "psql" ;;
+    mariadb)    echo "mariadb" ;;
+    opencode)   echo "opencode" ;;
+    cline)      echo "cline" ;;
+    zsh)        echo "zsh" ;;
+    *)          echo "" ;;
+  esac
+}
+
+tool_installed() {
+  local bin
+  bin="$(tool_bin "$1")"
+  [ -n "$bin" ] && command -v "$bin" >/dev/null 2>&1
+}
+
+valid_module() {
+  [ -n "$(module_tools "$1")" ]
+}
+
+# ---------------------------------------------------------------------------
+# install / uninstall
+# ---------------------------------------------------------------------------
+
+do_install_tool() {
+  local tool="$1" method pkg
+  method="$(tool_method "$tool")"
+  pkg="$(tool_pkg "$tool")"
+  if tool_installed "$tool" && [ "$DRY_RUN" -eq 0 ]; then
+    say "  ${DIM}$tool - already installed, skipped${RESET}"
+    return 0
+  fi
+  if [ "$method" = "npm" ]; then
+    if ! command -v npm >/dev/null 2>&1 && [ "$DRY_RUN" -eq 0 ]; then
+      err "  $tool needs npm. Install Node.js first:  v4zcore install lang --nodejs"
+      return 1
+    fi
+    run npm install -g "$pkg"
+  else
+    run pkg install -y "$pkg"
+  fi
+}
+
+do_uninstall_tool() {
+  local tool="$1" method pkg
+  method="$(tool_method "$tool")"
+  pkg="$(tool_pkg "$tool")"
+  if [ "$method" = "npm" ]; then
+    run npm uninstall -g "$pkg"
+  else
+    run pkg uninstall -y "$pkg"
+  fi
+}
+
+# Parse [--tool ...] selectors that follow a module name.
+# Prints the selected tools (all module tools when no selector given).
+selected_tools() {
+  local module="$1"; shift
+  if [ "$#" -eq 0 ]; then
+    module_tools "$module"
+    return 0
+  fi
+  local out="" t wanted valid
+  for t in "$@"; do
+    wanted="${t#--}"
+    valid=0
+    for c in $(module_tools "$module"); do
+      [ "$c" = "$wanted" ] && valid=1
+    done
+    if [ "$valid" -eq 1 ]; then
+      out="$out $wanted"
+    else
+      warn "  (tool '$wanted' is not part of module '$module' - ignored)"
+    fi
+  done
+  echo "$out"
+}
+
+shell_plugins_note() {
+  say ""
+  info "ZSH plugin note:"
+  say "  Extra ZSH goodies are available from the Termux repo, e.g."
+  say "    pkg install zsh-autosuggestions zsh-syntax-highlighting"
+  say "  then load them from your ~/.zshrc, for example:"
+  say "    source \$PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+  say "  Start the shell with:  zsh"
+}
+
+cmd_install() {
+  local module="${1:-}"
+  if [ -z "$module" ] || ! valid_module "$module"; then
+    err "Usage: v4zcore install <module> [--tool ...]"
+    say "Modules: $MODULE_ORDER"
+    return 1
+  fi
+  shift
+  banner
+  info "Installing module: $module ($(module_desc "$module"))"
+  local tools
+  tools="$(selected_tools "$module" "$@")"
+  if [ -z "$tools" ]; then
+    warn "Nothing selected to install."
+    return 1
+  fi
+  local t
+  for t in $tools; do
+    do_install_tool "$t"
+  done
+  [ "$module" = "shell" ] && shell_plugins_note
+  ok "Done."
+  return 0
+}
+
+cmd_uninstall() {
+  local module="${1:-}"
+  if [ -z "$module" ] || ! valid_module "$module"; then
+    err "Usage: v4zcore uninstall <module> [--tool ...]"
+    say "Modules: $MODULE_ORDER   (or run uninstall.sh to remove v4zcore itself)"
+    return 1
+  fi
+  shift
+  banner
+  info "Removing module: $module"
+  local tools
+  tools="$(selected_tools "$module" "$@")"
+  if [ -z "$tools" ]; then
+    warn "Nothing selected to remove."
+    return 1
+  fi
+  local t
+  for t in $tools; do
+    do_uninstall_tool "$t"
+  done
+  ok "Done."
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# list / show
+# ---------------------------------------------------------------------------
+
+cmd_list() {
+  local module="${1:-}"
+  banner
+  if [ -z "$module" ]; then
+    info "Available modules:"
+    local m
+    for m in $MODULE_ORDER; do
+      printf '  %-8s %s\n' "$m" "$(module_desc "$m")"
+    done
+    say ""
+    say "See the tools inside a module with:  v4zcore list <module>"
+    return 0
+  fi
+  if ! valid_module "$module"; then
+    err "Unknown module: $module"
+    say "Modules: $MODULE_ORDER"
+    return 1
+  fi
+  info "Module: $module - $(module_desc "$module")"
+  local t
+  for t in $(module_tools "$module"); do
+    if tool_installed "$t"; then
+      printf '  %-12s %b\n' "$t" "${GREEN}installed${RESET}"
+    else
+      printf '  %-12s %b\n' "$t" "${DIM}not installed${RESET}"
+    fi
+  done
+  return 0
+}
+
+cmd_show() {
+  local module="${1:-}"
+  if [ -z "$module" ] || ! valid_module "$module"; then
+    err "Usage: v4zcore show <module>"
+    say "Modules: $MODULE_ORDER"
+    return 1
+  fi
+  banner
+  info "Module: $module"
+  say "  $(module_desc "$module")"
+  say ""
+  say "  Tools and how they get installed:"
+  local t
+  for t in $(module_tools "$module"); do
+    printf '    %-12s via %-3s  package: %s\n' \
+      "$t" "$(tool_method "$t")" "$(tool_pkg "$t")"
+  done
+  say ""
+  say "  Install everything:   v4zcore install $module"
+  say "  Install one tool:     v4zcore install $module --<tool>"
+  [ "$module" = "shell" ] && shell_plugins_note
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# update
+# ---------------------------------------------------------------------------
+
+cmd_update() {
+  banner
+  info "Updating Termux package lists and installed packages..."
+  run pkg update -y
+  run pkg upgrade -y
+  if command -v npm >/dev/null 2>&1; then
+    local t
+    for t in opencode cline; do
+      if tool_installed "$t"; then
+        info "Updating npm tool: $t"
+        run npm update -g "$(tool_pkg "$t")"
+      fi
+    done
+  fi
+  ok "Update finished."
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# env - manage variables in ~/.bashrc or ~/.zshrc (values never printed)
+# ---------------------------------------------------------------------------
+
+rc_file() {
+  if [ -f "$HOME/.zshrc" ]; then
+    echo "$HOME/.zshrc"
+  else
+    echo "$HOME/.bashrc"
+  fi
+}
+
+env_set() {
+  local rc name value
+  rc="$(rc_file)"
+  printf 'Variable name: '
+  read -r name
+  if ! printf '%s' "$name" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*$'; then
+    err "Invalid variable name."
+    return 1
+  fi
+  printf 'Value (hidden): '
+  read -rs value
+  echo
+  touch "$rc"
+  # drop any previous v4zcore-managed line for this name
+  sed -i "/^export ${name}=.*# v4zcore\$/d" "$rc"
+  local esc
+  esc="$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
+  printf "export %s='%s' # v4zcore\n" "$name" "$esc" >> "$rc"
+  ok "Set $name in $(basename "$rc"). Apply with:  source $(basename "$rc")"
+}
+
+env_unset() {
+  local rc name="${1:-}"
+  rc="$(rc_file)"
+  if [ -z "$name" ]; then
+    info "Variables managed by v4zcore in $(basename "$rc"):"
+    grep '# v4zcore$' "$rc" 2>/dev/null | sed -E 's/^export ([A-Za-z_][A-Za-z0-9_]*)=.*/\1/' | nl -ba
+    printf 'Variable name to remove: '
+    read -r name
+  fi
+  if grep -q "^export ${name}=.*# v4zcore\$" "$rc" 2>/dev/null; then
+    sed -i "/^export ${name}=.*# v4zcore\$/d" "$rc"
+    ok "Removed $name from $(basename "$rc")."
+  else
+    warn "$name is not managed by v4zcore (nothing removed)."
+  fi
+}
+
+env_ls() {
+  local rc count
+  rc="$(rc_file)"
+  info "Variables managed by v4zcore ($(basename "$rc")):"
+  grep '# v4zcore$' "$rc" 2>/dev/null | sed -E 's/^export ([A-Za-z_][A-Za-z0-9_]*)=.*/\1=<redacted>/'
+  count="$(grep -c '# v4zcore$' "$rc" 2>/dev/null || true)"
+  say "${DIM}${count} variable(s). Values stay hidden.${RESET}"
+}
+
+cmd_env() {
+  case "${1:-}" in
+    set)   env_set ;;
+    unset) env_unset "${2:-}" ;;
+    ls)    env_ls ;;
+    *)
+      say "Usage:"
+      say "  v4zcore env set           add/update a variable (value typed hidden)"
+      say "  v4zcore env unset [NAME]  remove a variable"
+      say "  v4zcore env ls            list managed variables (values hidden)"
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# init - small original project starter stubs
+# ---------------------------------------------------------------------------
+
+cmd_init() {
+  local kind="${1:-}" dir="${2:-}"
+  case "$kind" in
+    python) dir="${dir:-python-app}" ;;
+    node)   dir="${dir:-node-app}" ;;
+    *)
+      err "Usage: v4zcore init <python|node> [directory]"
+      return 1
+      ;;
+  esac
+  if [ -e "$dir" ]; then
+    err "Directory already exists: $dir"
+    return 1
+  fi
+  mkdir -p "$dir"
+  info "Creating $kind starter project in ./$dir"
+  if [ "$kind" = "python" ]; then
+    cat > "$dir/main.py" <<'EOF'
+#!/usr/bin/env python3
+"""Starter entry point - edit me."""
+
+
+def main():
+    print("Hello from your new Python project!")
+
+
+if __name__ == "__main__":
+    main()
+EOF
+    cat > "$dir/requirements.txt" <<'EOF'
+# Add one package per line, e.g. requests
+EOF
+    cat > "$dir/.gitignore" <<'EOF'
+__pycache__/
+*.pyc
+venv/
+EOF
+    cat > "$dir/README.md" <<EOF
+# $dir
+
+Python starter project created with V4Z Core.
+
+Run it:
+
+    python main.py
+EOF
+  else
+    cat > "$dir/package.json" <<EOF
+{
+  "name": "$dir",
+  "version": "1.0.0",
+  "description": "Node starter project created with V4Z Core",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "license": "MIT"
+}
+EOF
+    cat > "$dir/index.js" <<'EOF'
+// Starter entry point - edit me.
+console.log("Hello from your new Node project!");
+EOF
+    cat > "$dir/.gitignore" <<'EOF'
+node_modules/
+EOF
+    cat > "$dir/README.md" <<EOF
+# $dir
+
+Node starter project created with V4Z Core.
+
+Run it:
+
+    npm start
+EOF
+  fi
+  ok "Project ready: cd $dir"
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# help / main
+# ---------------------------------------------------------------------------
+
+usage() {
+  banner
+  say "Usage: v4zcore [--dry-run] <command> [options]"
+  say ""
+  say "  install <module> [--tool ...]    install a whole module or picked tools"
+  say "  uninstall <module> [--tool ...]  remove module tools"
+  say "  list [module]                    modules, or tool status inside a module"
+  say "  show <module>                    what a module contains"
+  say "  update                           pkg update + upgrade (+ npm AI tools)"
+  say "  env set|unset|ls                 manage shell variables (values hidden)"
+  say "  init <python|node> [dir]         create a starter project"
+  say "  version                          print version"
+  say ""
+  say "Modules: $MODULE_ORDER"
+  say "Tip: add --dry-run anywhere to print commands without running them."
+}
+
+main() {
+  # --dry-run may appear anywhere; strip it out first
+  local args=() a
+  for a in "$@"; do
+    if [ "$a" = "--dry-run" ]; then
+      DRY_RUN=1
+    else
+      args+=("$a")
+    fi
+  done
+  local cmd="${args[0]:-}"
+  case "$cmd" in
+    install)   cmd_install "${args[@]:1}" ;;
+    uninstall) cmd_uninstall "${args[@]:1}" ;;
+    list)      cmd_list "${args[1]:-}" ;;
+    show)      cmd_show "${args[1]:-}" ;;
+    update)    cmd_update ;;
+    env)       cmd_env "${args[@]:1}" ;;
+    init)      cmd_init "${args[@]:1}" ;;
+    version|--version|-v) say "v4zcore $VERSION" ;;
+    help|--help|-h|"") usage ;;
+    *) err "Unknown command: $cmd"; usage; return 1 ;;
+  esac
+}
+
+main "$@"
