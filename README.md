@@ -26,8 +26,15 @@ v4zcore
 | `v4zcore env set` | Add/update a shell variable (value typed hidden, stored in `.bashrc`/`.zshrc`) |
 | `v4zcore env unset [NAME]` | Remove a v4zcore-managed variable |
 | `v4zcore env ls` | List managed variable names (values never printed) |
+| `v4zcore brain save <title>` | Save a note (body from stdin) into `~/.v4zcore/brain/` |
+| `v4zcore brain search <word>` | Find notes containing a word |
+| `v4zcore brain ls` / `show <slug>` | List notes / print one note |
+| `v4zcore pg init` | Create the PostgreSQL data directory (once) |
+| `v4zcore pg start` / `stop` / `status` | Manage the local PostgreSQL server |
 | `v4zcore init python [dir]` | Create a small Python starter project |
 | `v4zcore init node [dir]` | Create a small Node starter project |
+| `v4zcore init react [dir]` | Create a React (Vite) starter: package.json, index.html, src/main.jsx |
+| `v4zcore init express [dir]` | Create an Express starter: package.json, index.js |
 | `v4zcore version` | Print version |
 
 Add `--dry-run` anywhere to print the pkg/npm commands without running them:
@@ -52,8 +59,15 @@ v4zcore install lang --python --dry-run
 - Termux only: packages come from the Termux `pkg` repositories and global `npm`.
 - `env` values are written only to your own rc file and are never printed back.
 - The AI module needs Node.js: run `v4zcore install lang --nodejs` first.
-- Installing a database package does not start any server; initialise and run it the usual Termux way for that database.
+- Installing a database package does not start any server; for PostgreSQL use the `v4zcore pg` helper, other databases are run the usual Termux way.
+- Brain notes are plain markdown files in `~/.v4zcore/brain/` — yours to edit, copy or delete any time.
 
 ---
 
 © V4Z RASHD — [@rashdteem](https://t.me/rashdteem)
+
+## Credits
+
+Feature benchmark and inspiration: **W8SOJIB** (W8Core-Termux-Modedd, MIT License).
+
+V4Z Core itself is an original implementation, designed and written from scratch for **V4Z RASHD** ([@rashdteem](https://t.me/rashdteem)). The command set aims at the same goals, but no code is shared between the two projects.
